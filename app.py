@@ -1,106 +1,28 @@
 import streamlit as st
-import time
 import pandas as pd
-import random
 import numpy as np
+import time
+import random
 from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor, IsolationForest
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-# -----------------------
-# CUSTOM DARK UI STYLING
-# -----------------------
+# ---------------------------------------------------
+# CONFIGURATION
+# ---------------------------------------------------
 
-st.markdown("""
-<style>
-
-body {
-    background-color: #0E1117;
-}
-
-.block-container {
-    padding-top: 2rem;
-    padding-bottom: 2rem;
-}
-
-.stMetric {
-    background-color: #1C1F26;
-    padding: 15px;
-    border-radius: 10px;
-    box-shadow: 0px 0px 10px rgba(0, 255, 198, 0.2);
-}
-
-.stButton>button {
-    background-color: #00FFC6;
-    color: black;
-    border-radius: 8px;
-    font-weight: bold;
-}
-
-.stButton>button:hover {
-    background-color: #00d4a8;
-}
-
-/* RESET BUTTON STYLE */
-button[kind="secondary"] {
-    background-color: #ff4b4b !important;
-    color: white !important;
-    border-radius: 8px !important;
-    font-weight: bold !important;
-}
-
-button[kind="secondary"]:hover {
-    background-color: #cc0000 !important;
-}
-
-</style>
-""", unsafe_allow_html=True)
-st.set_page_config(page_title="Smart Electricity Dashboard", layout="wide")
-
-st.markdown("""
-<style>
-body {
-    background-color: #0E1117;
-}
-
-.block-container {
-    padding-top: 2rem;
-    padding-bottom: 2rem;
-}
-
-.stMetric {
-    background-color: #1C1F26;
-    padding: 15px;
-    border-radius: 10px;
-    box-shadow: 0px 0px 10px rgba(0, 255, 198, 0.2);
-}
-
-.stButton>button {
-    background-color: #00FFC6;
-    color: black;
-    border-radius: 8px;
-    font-weight: bold;
-}
-
-.stButton>button:hover {
-    background-color: #00d4a8;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# -----------------------
-# CONFIG
-# -----------------------
-
-DAILY_LIMIT = 5.0
+DAILY_LIMIT = 15
+SIMULATION_SPEED = 0.5  # seconds
 
 SLABS = [
-    (3, 5),            # first 3 units at ₹5
-    (6, 7),            # next 3 units at ₹7
-    (float('inf'), 9)  # remaining at ₹9
+    (100, 5),
+    (300, 7),
+    (float("inf"), 9)
 ]
 
-# -----------------------
-# SESSION STATE INIT
-# -----------------------
+# ---------------------------------------------------
+# SESSION STATE
+# ---------------------------------------------------
 
 if "data" not in st.session_state:
     st.session_state.data = []
@@ -108,146 +30,208 @@ if "data" not in st.session_state:
 if "running" not in st.session_state:
     st.session_state.running = False
 
-# -----------------------
-# FUNCTIONS
-# -----------------------
-
-def generate_usage():
-    return round(random.uniform(0.05, 0.60), 3)
-
+# ---------------------------------------------------
+# BILL CALCULATION
+# ---------------------------------------------------
 
 def calculate_slab_bill(total_usage):
     remaining = total_usage
     bill = 0
-    previous_limit = 0
+    prev = 0
 
     for limit, rate in SLABS:
-        slab_units = min(remaining, limit - previous_limit)
+        slab_units = min(remaining, limit - prev)
         bill += slab_units * rate
         remaining -= slab_units
-        previous_limit = limit
+        prev = limit
         if remaining <= 0:
             break
 
     return round(bill, 2)
 
+# ---------------------------------------------------
+# REALISTIC TIME-SERIES SIMULATION
+# ---------------------------------------------------
 
-def predict_next_reading(data):
-    if len(data) < 10:
+def generate_usage(hour):
+    base = 0.3 + 0.2 * np.sin(hour / 24 * 2 * np.pi)
+    noise = random.uniform(-0.05, 0.05)
+    return round(max(base + noise, 0.05), 3)
+
+# ---------------------------------------------------
+# FEATURE ENGINEERING
+# ---------------------------------------------------
+
+def create_features(data):
+    df = pd.DataFrame(data, columns=["Usage"])
+    df["lag1"] = df["Usage"].shift(1)
+    df["lag2"] = df["Usage"].shift(2)
+    df["rolling_mean"] = df["Usage"].rolling(3).mean()
+    df.dropna(inplace=True)
+    return df
+
+# ---------------------------------------------------
+# MODEL TRAINING & EVALUATION
+# ---------------------------------------------------
+
+def train_models(data):
+
+    if len(data) < 20:
+        return None
+
+    df = create_features(data)
+
+    X = df[["lag1", "lag2", "rolling_mean"]]
+    y = df["Usage"]
+
+    split = int(len(df) * 0.8)
+    X_train, X_test = X[:split], X[split:]
+    y_train, y_test = y[:split], y[split:]
+
+    lr = LinearRegression()
+    rf = RandomForestRegressor(n_estimators=100)
+
+    lr.fit(X_train, y_train)
+    rf.fit(X_train, y_train)
+
+    lr_pred = lr.predict(X_test)
+    rf_pred = rf.predict(X_test)
+
+    metrics = {
+        "Linear Regression": {
+            "MAE": mean_absolute_error(y_test, lr_pred),
+            "RMSE": np.sqrt(mean_squared_error(y_test, lr_pred)),
+            "R2": r2_score(y_test, lr_pred)
+        },
+        "Random Forest": {
+            "MAE": mean_absolute_error(y_test, rf_pred),
+            "RMSE": np.sqrt(mean_squared_error(y_test, rf_pred)),
+            "R2": r2_score(y_test, rf_pred)
+        }
+    }
+
+    return metrics, lr, rf
+
+# ---------------------------------------------------
+# ANOMALY DETECTION
+# ---------------------------------------------------
+
+def detect_anomalies(data):
+    if len(data) < 20:
         return None
 
     df = pd.DataFrame(data, columns=["Usage"])
-    df["Index"] = np.arange(len(df))
+    model = IsolationForest(contamination=0.05)
+    df["anomaly"] = model.fit_predict(df[["Usage"]])
+    return df
 
-    X = df[["Index"]]
-    y = df["Usage"]
+# ---------------------------------------------------
+# MONTHLY PROJECTION
+# ---------------------------------------------------
 
-    model = LinearRegression()
-    model.fit(X, y)
-
-    prediction = model.predict([[len(df)]])[0]
-    return round(prediction, 3)
-
-
-def predict_monthly_bill(data):
-    if len(data) < 10:
+def project_monthly_bill(data):
+    if len(data) < 20:
         return None
 
-    avg_usage = np.mean(data)
-    estimated_30_day_usage = avg_usage * 30
-    projected_bill = calculate_slab_bill(estimated_30_day_usage)
+    avg_hourly = np.mean(data)
+    daily_estimate = avg_hourly * 24
+    monthly_usage = daily_estimate * 30
+    monthly_bill = calculate_slab_bill(monthly_usage)
 
-    return round(estimated_30_day_usage, 2), round(projected_bill, 2)
+    return round(monthly_usage, 2), monthly_bill
 
-# -----------------------
-# UI HEADER
-# -----------------------
+# ---------------------------------------------------
+# UI
+# ---------------------------------------------------
 
-st.markdown("<h1 style='text-align: center; color: #00FFC6;'>⚡ Smart Electricity Dashboard</h1>", unsafe_allow_html=True)
-st.markdown("<hr style='border:1px solid #00FFC6;'>", unsafe_allow_html=True)
+st.title("⚡ Smart Electricity AI Dashboard (Capstone Level)")
 
 col1, col2, col3 = st.columns(3)
 
-if col1.button("Start Simulation"):
+if col1.button("Start"):
     st.session_state.running = True
 
-if col2.button("Stop Simulation"):
+if col2.button("Stop"):
     st.session_state.running = False
 
 if col3.button("Reset"):
-    st.session_state.running = False
     st.session_state.data = []
-    st.rerun()
 
-placeholder_metrics = st.empty()
-placeholder_graph = st.empty()
+placeholder = st.empty()
 
-# -----------------------
-# REAL-TIME LOOP
-# -----------------------
+# ---------------------------------------------------
+# REAL-TIME SIMULATION LOOP
+# ---------------------------------------------------
 
 if st.session_state.running:
 
-    usage = generate_usage()
+    hour = len(st.session_state.data) % 24
+    usage = generate_usage(hour)
     st.session_state.data.append(usage)
 
-    total_usage = sum(st.session_state.data)
-    bill = calculate_slab_bill(total_usage)
+    total = sum(st.session_state.data)
+    bill = calculate_slab_bill(total)
 
-    monthly_result = predict_monthly_bill(st.session_state.data)
+    with placeholder.container():
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Latest Reading", f"{usage} kWh")
+        m2.metric("Total Usage", f"{round(total,2)} kWh")
+        m3.metric("Estimated Bill", f"₹{bill}")
 
-    with placeholder_metrics.container():
-        col1, col2, col3, col4, col5 = st.columns(5)
+        df = pd.DataFrame(st.session_state.data, columns=["Usage"])
+        df["Cumulative"] = df["Usage"].cumsum()
+        st.line_chart(df["Cumulative"])
 
-        col1.metric("Latest Reading", f"{usage} kWh")
-        col2.metric("Total Usage", f"{round(total_usage,3)} kWh")
-        col3.metric("Estimated Bill", f"₹{bill}")
+        if total > DAILY_LIMIT:
+            st.error("⚠ Daily limit exceeded!")
 
-        if monthly_result:
-            usage_30, bill_30 = monthly_result
-            col4.metric("Est. 30-Day Usage", f"{usage_30} kWh")
-            col5.metric("Projected Monthly Bill", f"₹{bill_30}")
-        else:
-            col4.metric("Est. 30-Day Usage", "Waiting...")
-            col5.metric("Projected Monthly Bill", "Waiting...")
-
-    if total_usage > DAILY_LIMIT:
-        st.error("⚠ Daily limit exceeded!")
-
-    df = pd.DataFrame(st.session_state.data, columns=["Usage"])
-    df["Cumulative"] = df["Usage"].cumsum()
-
-    placeholder_graph.line_chart(df["Cumulative"])
-
-    time.sleep(1)
+    time.sleep(SIMULATION_SPEED)
     st.rerun()
 
-# -----------------------
-# AI SECTION (VISIBLE EVEN WHEN STOPPED)
-# -----------------------
+# ---------------------------------------------------
+# AI ANALYSIS SECTION
+# ---------------------------------------------------
 
-st.subheader("AI Prediction")
+st.header("AI Model Evaluation")
 
-prediction = predict_next_reading(st.session_state.data)
+model_output = train_models(st.session_state.data)
 
-if prediction:
-    st.success(f"Predicted Next Reading: {prediction} kWh")
+if model_output:
+    metrics, lr_model, rf_model = model_output
+
+    for model_name, values in metrics.items():
+        st.subheader(model_name)
+        st.write(f"MAE: {values['MAE']:.4f}")
+        st.write(f"RMSE: {values['RMSE']:.4f}")
+        st.write(f"R² Score: {values['R2']:.4f}")
 else:
-    st.info("Need at least 10 readings for prediction.")
+    st.info("Need at least 20 readings for model training.")
 
-# -----------------------
-# MONTHLY PROJECTION WHEN STOPPED
-# -----------------------
+# ---------------------------------------------------
+# ANOMALY DETECTION
+# ---------------------------------------------------
 
-if not st.session_state.running:
+st.header("Anomaly Detection")
 
-    st.subheader("📅 Monthly Bill Projection")
+anomaly_df = detect_anomalies(st.session_state.data)
 
-    monthly_result = predict_monthly_bill(st.session_state.data)
+if anomaly_df is not None:
+    anomalies = anomaly_df[anomaly_df["anomaly"] == -1]
+    st.write(f"Detected {len(anomalies)} anomalies")
+else:
+    st.info("Need at least 20 readings for anomaly detection.")
 
-    if monthly_result:
-        usage_30, bill_30 = monthly_result
-        st.metric("Estimated Monthly Usage (30 days)", f"{usage_30} kWh")
-        st.metric("Projected Monthly Bill", f"₹{bill_30}")
-    else:
-        st.info("Need at least 10 readings for monthly prediction.")
+# ---------------------------------------------------
+# MONTHLY BILL PROJECTION
+# ---------------------------------------------------
+
+st.header("Monthly Projection")
+
+monthly = project_monthly_bill(st.session_state.data)
+
+if monthly:
+    usage_30, bill_30 = monthly
+    st.metric("Projected 30-Day Usage", f"{usage_30} kWh")
+    st.metric("Projected Monthly Bill", f"₹{bill_30}")
+else:
+    st.info("Need at least 20 readings for monthly projection.")
