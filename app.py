@@ -176,7 +176,7 @@ if st.session_state.running:
         st.session_state.simulated_seconds += update_interval
         st.session_state.last_update = now
 
-    st.experimental_rerun()
+    st.rerun()
 
 # =====================================================
 # METRICS
