@@ -4,10 +4,9 @@ import pandas as pd
 import random
 import numpy as np
 from sklearn.linear_model import LinearRegression
-from datetime import datetime
 
 # =====================================================
-# PRODUCTION CONFIG
+# CONFIGURATION
 # =====================================================
 
 DAILY_LIMIT = 5.0
@@ -18,37 +17,38 @@ SLABS = [
     (float('inf'), 9)
 ]
 
-# =====================================================
-# REALISTIC TIME SCALING OPTIONS
-# =====================================================
-
 TIME_SCALING_OPTIONS = {
-    "Fast (1 Reading = 5 Seconds)": 5,
-    "Medium (1 Reading = 10 Seconds)": 10,
-    "Slow (1 Reading = 30 Seconds)": 30
+    "5 Seconds per Reading": 5,
+    "10 Seconds per Reading": 10,
+    "30 Seconds per Reading": 30
 }
 
 # =====================================================
-# DARK UI STYLING
+# DARK UI
 # =====================================================
 
 st.markdown("""
 <style>
 body { background-color: #0E1117; }
 .block-container { padding-top: 2rem; padding-bottom: 2rem; }
+
 .stMetric {
     background-color: #1C1F26;
     padding: 15px;
     border-radius: 10px;
     box-shadow: 0px 0px 10px rgba(0, 255, 198, 0.2);
 }
+
 .stButton>button {
     background-color: #00FFC6;
     color: black;
     border-radius: 8px;
     font-weight: bold;
 }
-.stButton>button:hover { background-color: #00d4a8; }
+
+.stButton>button:hover {
+    background-color: #00d4a8;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -62,11 +62,8 @@ if "data" not in st.session_state:
 if "running" not in st.session_state:
     st.session_state.running = False
 
-if "last_update" not in st.session_state:
-    st.session_state.last_update = datetime.now()
-
-if "simulated_minutes" not in st.session_state:
-    st.session_state.simulated_minutes = 0
+if "simulated_seconds" not in st.session_state:
+    st.session_state.simulated_seconds = 0
 
 # =====================================================
 # CORE FUNCTIONS
@@ -109,92 +106,81 @@ def predict_next_reading(data):
     return round(prediction, 3)
 
 
-def predict_monthly_bill(data, simulated_minutes):
-    if len(data) < 10 or simulated_minutes == 0:
+def predict_monthly_bill(data, simulated_seconds):
+    if len(data) < 10 or simulated_seconds == 0:
         return None
 
     total_usage = sum(data)
 
-    # Calculate usage per minute
-    usage_per_minute = total_usage / simulated_minutes
+    usage_per_second = total_usage / simulated_seconds
 
-    # 30 days = 30 * 24 * 60 minutes
-    monthly_minutes = 30 * 24 * 60
+    monthly_seconds = 30 * 24 * 60 * 60
+    estimated_monthly_usage = usage_per_second * monthly_seconds
 
-    estimated_monthly_usage = usage_per_minute * monthly_minutes
     monthly_bill = calculate_slab_bill(estimated_monthly_usage)
 
     return round(estimated_monthly_usage, 2), round(monthly_bill, 2)
 
 # =====================================================
-# UI HEADER
+# HEADER
 # =====================================================
 
-st.markdown("""
-<h1 style='text-align: center; color: #00FFC6; font-size: 38px;'>
-Household Electricity Consumption Analysis
-</h1>
-<p style='text-align: center; color: gray; font-size: 18px;'>
-AI-Based Forecasting & Cost Optimization Model
-</p>
-""", unsafe_allow_html=True)
+st.markdown(
+    "<h1 style='text-align:center; color:#00FFC6;'>"
+    "⚡ Household Electricity Consumption Analysis (Project Model)"
+    "</h1>",
+    unsafe_allow_html=True
+)
 
 st.markdown("<hr style='border:1px solid #00FFC6;'>", unsafe_allow_html=True)
 
-st.markdown("<hr style='border:1px solid #00FFC6;'>", unsafe_allow_html=True)
 # =====================================================
 # SIMULATION SETTINGS
 # =====================================================
 
 colA, colB = st.columns(2)
 
-time_scale_label = colA.selectbox(
+time_label = colA.selectbox(
     "Simulation Speed",
     list(TIME_SCALING_OPTIONS.keys())
 )
 
-update_interval = TIME_SCALING_OPTIONS[time_scale_label]
-
-minutes_per_reading = 1  # Logical time per reading
+update_interval = TIME_SCALING_OPTIONS[time_label]
 
 # =====================================================
 # CONTROL BUTTONS
 # =====================================================
 
-col1, col2, col3 = st.columns(3)
+c1, c2, c3 = st.columns(3)
 
-if col1.button("Start Simulation"):
+if c1.button("Start"):
     st.session_state.running = True
 
-if col2.button("Stop Simulation"):
+if c2.button("Stop"):
     st.session_state.running = False
 
-if col3.button("Reset"):
+if c3.button("Reset"):
     st.session_state.running = False
     st.session_state.data = []
-    st.session_state.simulated_minutes = 0
+    st.session_state.simulated_seconds = 0
     st.rerun()
 
 # =====================================================
-# REAL-TIME TICK (Production Safe)
+# REAL-TIME ENGINE (AUTO LIVE)
 # =====================================================
 
 if st.session_state.running:
-    now = datetime.now()
-    time_diff = (now - st.session_state.last_update).total_seconds()
 
-    if time_diff >= update_interval:
+    usage = generate_usage()
+    st.session_state.data.append(usage)
 
-        usage = generate_usage()
-        st.session_state.data.append(usage)
+    st.session_state.simulated_seconds += update_interval
 
-        st.session_state.simulated_minutes += minutes_per_reading
-        st.session_state.last_update = now
-
-        st.rerun()
+    time.sleep(update_interval)
+    st.rerun()
 
 # =====================================================
-# METRICS DISPLAY
+# METRICS
 # =====================================================
 
 total_usage = sum(st.session_state.data)
@@ -202,9 +188,14 @@ bill = calculate_slab_bill(total_usage)
 
 m1, m2, m3 = st.columns(3)
 
-m1.metric("Latest Reading", f"{st.session_state.data[-1] if st.session_state.data else 0} kWh")
-m2.metric("Total Usage", f"{round(total_usage,3)} kWh")
-m3.metric("Estimated Bill", f"₹{bill}")
+m1.metric("Latest Reading",
+          f"{st.session_state.data[-1] if st.session_state.data else 0} kWh")
+
+m2.metric("Total Usage",
+          f"{round(total_usage, 3)} kWh")
+
+m3.metric("Estimated Bill",
+          f"₹{bill}")
 
 if total_usage > DAILY_LIMIT:
     st.error("⚠ Daily limit exceeded!")
@@ -219,33 +210,33 @@ if st.session_state.data:
     st.line_chart(df["Cumulative"])
 
 # =====================================================
-# AI PREDICTION
+# AI FORECASTING
 # =====================================================
 
-st.subheader("Next Reading")
+st.subheader("AI-Based Forecasting")
 
 prediction = predict_next_reading(st.session_state.data)
 
 if prediction:
     st.success(f"Predicted Next Reading: {prediction} kWh")
 else:
-    st.info("Need at least 10 readings.")
+    st.info("Need at least 10 readings for AI model.")
 
 # =====================================================
-# MONTHLY PROJECTION (REALISTIC)
+# MONTHLY PROJECTION
 # =====================================================
 
-st.subheader("📅 Monthly Bill Projection")
+st.subheader("📅 Monthly Cost Projection")
 
 monthly_result = predict_monthly_bill(
     st.session_state.data,
-    st.session_state.simulated_minutes
+    st.session_state.simulated_seconds
 )
 
 if monthly_result:
-    usage_30, bill_30 = monthly_result
-    c1, c2 = st.columns(2)
-    c1.metric("Estimated 30-Day Usage", f"{usage_30} kWh")
-    c2.metric("Projected Monthly Bill", f"₹{bill_30}")
+    u30, b30 = monthly_result
+    mc1, mc2 = st.columns(2)
+    mc1.metric("Estimated 30-Day Usage", f"{u30} kWh")
+    mc2.metric("Projected Monthly Bill", f"₹{b30}")
 else:
     st.info("Run simulation longer for accurate projection.")
