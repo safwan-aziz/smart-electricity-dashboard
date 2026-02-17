@@ -117,7 +117,7 @@ if st.session_state.running:
         chart_placeholder.line_chart(df["Cumulative"])
 
         time.sleep(1)
-        st.experimental_rerun()
+        st.rerun()
 # -----------------------
 # AI SECTION
 # -----------------------
