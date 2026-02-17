@@ -9,6 +9,50 @@ from sklearn.linear_model import LinearRegression
 # CUSTOM DARK UI STYLING
 # -----------------------
 
+st.markdown("""
+<style>
+
+body {
+    background-color: #0E1117;
+}
+
+.block-container {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+}
+
+.stMetric {
+    background-color: #1C1F26;
+    padding: 15px;
+    border-radius: 10px;
+    box-shadow: 0px 0px 10px rgba(0, 255, 198, 0.2);
+}
+
+.stButton>button {
+    background-color: #00FFC6;
+    color: black;
+    border-radius: 8px;
+    font-weight: bold;
+}
+
+.stButton>button:hover {
+    background-color: #00d4a8;
+}
+
+/* RESET BUTTON STYLE */
+button[kind="secondary"] {
+    background-color: #ff4b4b !important;
+    color: white !important;
+    border-radius: 8px !important;
+    font-weight: bold !important;
+}
+
+button[kind="secondary"]:hover {
+    background-color: #cc0000 !important;
+}
+
+</style>
+""", unsafe_allow_html=True)
 st.set_page_config(page_title="Smart Electricity Dashboard", layout="wide")
 
 st.markdown("""
