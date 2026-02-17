@@ -1,0 +1,3 @@
+__pycache__/
+usage_log.csv
+.streamlit/secrets.toml
