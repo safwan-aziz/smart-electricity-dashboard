@@ -3,7 +3,7 @@ import pandas as pd
 import random
 import numpy as np
 from sklearn.linear_model import LinearRegression
-from datetime import datetime
+from streamlit_autorefresh import st_autorefresh
 
 # =====================================================
 # CONFIG
@@ -18,42 +18,13 @@ SLABS = [
 ]
 
 TIME_OPTIONS = {
-    "5 Seconds per Reading": 5,
-    "10 Seconds per Reading": 10,
-    "30 Seconds per Reading": 30
+    "5 Seconds per Reading": 5000,
+    "10 Seconds per Reading": 10000,
+    "30 Seconds per Reading": 30000
 }
 
 # =====================================================
-# DARK UI
-# =====================================================
-
-st.markdown("""
-<style>
-body { background-color: #0E1117; }
-.block-container { padding-top: 2rem; padding-bottom: 2rem; }
-
-.stMetric {
-    background-color: #1C1F26;
-    padding: 15px;
-    border-radius: 10px;
-    box-shadow: 0px 0px 12px rgba(0,255,198,0.25);
-}
-
-.stButton>button {
-    background-color: #00FFC6;
-    color: black;
-    border-radius: 8px;
-    font-weight: bold;
-}
-
-.stButton>button:hover {
-    background-color: #00d4a8;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# =====================================================
-# SESSION STATE INIT
+# SESSION INIT
 # =====================================================
 
 if "data" not in st.session_state:
@@ -61,9 +32,6 @@ if "data" not in st.session_state:
 
 if "running" not in st.session_state:
     st.session_state.running = False
-
-if "last_update" not in st.session_state:
-    st.session_state.last_update = datetime.now()
 
 if "simulated_seconds" not in st.session_state:
     st.session_state.simulated_seconds = 0
@@ -123,18 +91,14 @@ def predict_monthly_bill(data, simulated_seconds):
 # HEADER
 # =====================================================
 
-st.markdown(
-    "<h1 style='text-align:center;color:#00FFC6;'>⚡ Household Electricity Consumption Analysis (Project Model)</h1>",
-    unsafe_allow_html=True
-)
-st.markdown("<hr style='border:1px solid #00FFC6;'>", unsafe_allow_html=True)
+st.title("⚡ Household Electricity Consumption Analysis (Project Model)")
 
 # =====================================================
-# SIMULATION SETTINGS
+# SPEED SELECTOR
 # =====================================================
 
 speed_label = st.selectbox("Simulation Speed", list(TIME_OPTIONS.keys()))
-interval = TIME_OPTIONS[speed_label]
+interval_ms = TIME_OPTIONS[speed_label]
 
 # =====================================================
 # BUTTONS
@@ -152,21 +116,17 @@ if col3.button("Reset"):
     st.session_state.running = False
     st.session_state.data = []
     st.session_state.simulated_seconds = 0
-    st.session_state.last_update = datetime.now()
 
 # =====================================================
-# LIVE ENGINE (NON-BLOCKING)
+# AUTO REFRESH ENGINE
 # =====================================================
 
 if st.session_state.running:
-    now = datetime.now()
-    diff = (now - st.session_state.last_update).total_seconds()
+    count = st_autorefresh(interval=interval_ms, key="simulation_refresh")
 
-    if diff >= interval:
-        usage = generate_usage()
-        st.session_state.data.append(usage)
-        st.session_state.simulated_seconds += interval
-        st.session_state.last_update = now
+    usage = generate_usage()
+    st.session_state.data.append(usage)
+    st.session_state.simulated_seconds += interval_ms / 1000
 
 # =====================================================
 # METRICS
@@ -174,7 +134,6 @@ if st.session_state.running:
 
 total_usage = sum(st.session_state.data)
 bill = calculate_slab_bill(total_usage)
-
 latest = st.session_state.data[-1] if st.session_state.data else 0
 
 m1, m2, m3 = st.columns(3)
@@ -195,7 +154,7 @@ if st.session_state.data:
     st.line_chart(df["Cumulative"])
 
 # =====================================================
-# AI SECTION
+# AI
 # =====================================================
 
 st.subheader("AI Prediction")
