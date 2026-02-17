@@ -1,9 +1,9 @@
 import streamlit as st
-import time
 import pandas as pd
 import random
 import numpy as np
 from sklearn.linear_model import LinearRegression
+from datetime import datetime
 
 # =====================================================
 # CONFIG
@@ -62,11 +62,14 @@ if "data" not in st.session_state:
 if "running" not in st.session_state:
     st.session_state.running = False
 
+if "last_update" not in st.session_state:
+    st.session_state.last_update = datetime.now()
+
 if "simulated_seconds" not in st.session_state:
     st.session_state.simulated_seconds = 0
 
 # =====================================================
-# CORE FUNCTIONS
+# FUNCTIONS
 # =====================================================
 
 def generate_usage():
@@ -108,11 +111,9 @@ def predict_monthly_bill(data, simulated_seconds):
         return None
 
     total_usage = sum(data)
-
     usage_per_second = total_usage / simulated_seconds
 
     monthly_seconds = 30 * 24 * 60 * 60
-
     estimated_monthly_usage = usage_per_second * monthly_seconds
     monthly_bill = calculate_slab_bill(estimated_monthly_usage)
 
@@ -132,40 +133,40 @@ st.markdown("<hr style='border:1px solid #00FFC6;'>", unsafe_allow_html=True)
 # SIMULATION SETTINGS
 # =====================================================
 
-colA, colB = st.columns(2)
-
-speed_label = colA.selectbox("Simulation Speed", list(TIME_OPTIONS.keys()))
-seconds_per_reading = TIME_OPTIONS[speed_label]
+speed_label = st.selectbox("Simulation Speed", list(TIME_OPTIONS.keys()))
+interval = TIME_OPTIONS[speed_label]
 
 # =====================================================
-# CONTROL BUTTONS
+# BUTTONS
 # =====================================================
 
-c1, c2, c3 = st.columns(3)
+col1, col2, col3 = st.columns(3)
 
-if c1.button("Start"):
+if col1.button("Start"):
     st.session_state.running = True
 
-if c2.button("Stop"):
+if col2.button("Stop"):
     st.session_state.running = False
 
-if c3.button("Reset"):
+if col3.button("Reset"):
     st.session_state.running = False
     st.session_state.data = []
     st.session_state.simulated_seconds = 0
-    st.rerun()
+    st.session_state.last_update = datetime.now()
 
 # =====================================================
-# REAL-TIME LOOP (SAFE VERSION)
+# LIVE ENGINE (NON-BLOCKING)
 # =====================================================
 
 if st.session_state.running:
-    usage = generate_usage()
-    st.session_state.data.append(usage)
-    st.session_state.simulated_seconds += seconds_per_reading
+    now = datetime.now()
+    diff = (now - st.session_state.last_update).total_seconds()
 
-    time.sleep(seconds_per_reading)
-    st.rerun()
+    if diff >= interval:
+        usage = generate_usage()
+        st.session_state.data.append(usage)
+        st.session_state.simulated_seconds += interval
+        st.session_state.last_update = now
 
 # =====================================================
 # METRICS
@@ -174,10 +175,9 @@ if st.session_state.running:
 total_usage = sum(st.session_state.data)
 bill = calculate_slab_bill(total_usage)
 
-m1, m2, m3 = st.columns(3)
-
 latest = st.session_state.data[-1] if st.session_state.data else 0
 
+m1, m2, m3 = st.columns(3)
 m1.metric("Latest Reading", f"{latest} kWh")
 m2.metric("Total Usage", f"{round(total_usage,3)} kWh")
 m3.metric("Estimated Bill", f"₹{bill}")
@@ -195,7 +195,7 @@ if st.session_state.data:
     st.line_chart(df["Cumulative"])
 
 # =====================================================
-# AI PREDICTION
+# AI SECTION
 # =====================================================
 
 st.subheader("AI Prediction")
