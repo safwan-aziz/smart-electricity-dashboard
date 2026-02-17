@@ -36,6 +36,9 @@ if "running" not in st.session_state:
 if "simulated_seconds" not in st.session_state:
     st.session_state.simulated_seconds = 0
 
+if "refresh_counter" not in st.session_state:
+    st.session_state.refresh_counter = 0
+
 # =====================================================
 # FUNCTIONS
 # =====================================================
@@ -116,17 +119,27 @@ if col3.button("Reset"):
     st.session_state.running = False
     st.session_state.data = []
     st.session_state.simulated_seconds = 0
+    st.session_state.refresh_counter = 0
+    st.rerun()
 
 # =====================================================
-# AUTO REFRESH ENGINE
+# REAL-TIME ENGINE
 # =====================================================
 
 if st.session_state.running:
-    st_autorefresh(interval=seconds_per_reading * 1000, key="auto")
 
-    usage = generate_usage()
-    st.session_state.data.append(usage)
-    st.session_state.simulated_seconds += seconds_per_reading
+    counter = st_autorefresh(
+        interval=seconds_per_reading * 1000,
+        key="live_refresh"
+    )
+
+    # Only add reading when refresh actually increments
+    if counter != st.session_state.refresh_counter:
+        st.session_state.refresh_counter = counter
+
+        usage = generate_usage()
+        st.session_state.data.append(usage)
+        st.session_state.simulated_seconds += seconds_per_reading
 
 # =====================================================
 # METRICS
