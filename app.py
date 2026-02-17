@@ -18,9 +18,9 @@ SLABS = [
 ]
 
 TIME_OPTIONS = {
-    "5 Seconds per Reading": 5000,
-    "10 Seconds per Reading": 10000,
-    "30 Seconds per Reading": 30000
+    "5 Seconds per Reading": 5,
+    "10 Seconds per Reading": 10,
+    "30 Seconds per Reading": 30
 }
 
 # =====================================================
@@ -98,7 +98,7 @@ st.title("⚡ Household Electricity Consumption Analysis (Project Model)")
 # =====================================================
 
 speed_label = st.selectbox("Simulation Speed", list(TIME_OPTIONS.keys()))
-interval_ms = TIME_OPTIONS[speed_label]
+seconds_per_reading = TIME_OPTIONS[speed_label]
 
 # =====================================================
 # BUTTONS
@@ -122,11 +122,11 @@ if col3.button("Reset"):
 # =====================================================
 
 if st.session_state.running:
-    count = st_autorefresh(interval=interval_ms, key="simulation_refresh")
+    st_autorefresh(interval=seconds_per_reading * 1000, key="auto")
 
     usage = generate_usage()
     st.session_state.data.append(usage)
-    st.session_state.simulated_seconds += interval_ms / 1000
+    st.session_state.simulated_seconds += seconds_per_reading
 
 # =====================================================
 # METRICS
@@ -154,7 +154,7 @@ if st.session_state.data:
     st.line_chart(df["Cumulative"])
 
 # =====================================================
-# AI
+# AI PREDICTION
 # =====================================================
 
 st.subheader("AI Prediction")
