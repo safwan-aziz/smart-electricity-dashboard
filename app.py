@@ -23,9 +23,9 @@ SLABS = [
 # =====================================================
 
 TIME_SCALING_OPTIONS = {
-    "1 Reading = 1 Minute": 1,
-    "1 Reading = 5 Minutes": 5,
-    "1 Reading = 15 Minutes": 15
+    "Fast (1 Reading = 5 Seconds)": 5,
+    "Medium (1 Reading = 10 Seconds)": 10,
+    "Slow (1 Reading = 30 Seconds)": 30
 }
 
 # =====================================================
@@ -153,14 +153,9 @@ time_scale_label = colA.selectbox(
     list(TIME_SCALING_OPTIONS.keys())
 )
 
-minutes_per_reading = TIME_SCALING_OPTIONS[time_scale_label]
+update_interval = TIME_SCALING_OPTIONS[time_scale_label]
 
-update_interval = colB.slider(
-    "Update Interval (seconds)",
-    min_value=1,
-    max_value=5,
-    value=1
-)
+minutes_per_reading = 1  # Logical time per reading
 
 # =====================================================
 # CONTROL BUTTONS
