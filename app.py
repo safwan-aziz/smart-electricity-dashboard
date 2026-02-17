@@ -134,34 +134,28 @@ if st.session_state.running:
 
     chart_placeholder = st.empty()
 
-    while st.session_state.running:
+    usage = generate_usage()
+    st.session_state.data.append(usage)
 
-        usage = generate_usage()
-        st.session_state.data.append(usage)
+    total_usage = sum(st.session_state.data)
+    bill = calculate_slab_bill(total_usage)
 
-        total_usage = sum(st.session_state.data)
-        bill = calculate_slab_bill(total_usage)
-
-        # Update metrics
-        with placeholder_metrics.container():
-          col1, col2, col3 = st.columns(3)
-
-    col1.metric("Latest Reading", f"{usage} kWh")
-    col2.metric("Total Usage", f"{round(total_usage,3)} kWh")
-    col3.metric("Estimated Bill", f"₹{bill}")
+    with placeholder_metrics.container():
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Latest Reading", f"{usage} kWh")
+        col2.metric("Total Usage", f"{round(total_usage,3)} kWh")
+        col3.metric("Estimated Bill", f"{bill}")
 
     if total_usage > DAILY_LIMIT:
         st.error("⚠ Daily limit exceeded!")
 
-        # Smooth live graph
-        df = pd.DataFrame(st.session_state.data, columns=["Usage"])
-        df["Cumulative"] = df["Usage"].cumsum()
+    df = pd.DataFrame(st.session_state.data, columns=["Usage"])
+    df["Cumulative"] = df["Usage"].cumsum()
 
-        chart_placeholder.line_chart(df["Cumulative"])
+    chart_placeholder.line_chart(df["Cumulative"])
 
-        time.sleep(1)
-        st.rerun()
-
+    time.sleep(1)
+    st.rerun()
 # -----------------------
 # AI SECTION
 # -----------------------
