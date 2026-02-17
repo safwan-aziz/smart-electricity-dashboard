@@ -122,13 +122,18 @@ def predict_monthly_bill(data):
 st.markdown("<h1 style='text-align: center; color: #00FFC6;'>⚡ Smart Electricity Dashboard</h1>", unsafe_allow_html=True)
 st.markdown("<hr style='border:1px solid #00FFC6;'>", unsafe_allow_html=True)
 
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 
 if col1.button("Start Simulation"):
     st.session_state.running = True
 
 if col2.button("Stop Simulation"):
     st.session_state.running = False
+
+if col3.button("Reset"):
+    st.session_state.running = False
+    st.session_state.data = []
+    st.rerun()
 
 placeholder_metrics = st.empty()
 placeholder_graph = st.empty()
