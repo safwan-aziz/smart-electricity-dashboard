@@ -1,12 +1,12 @@
 import streamlit as st
-import time
 import pandas as pd
 import random
 import numpy as np
 from sklearn.linear_model import LinearRegression
+from datetime import datetime
 
 # =====================================================
-# CONFIGURATION
+# CONFIG
 # =====================================================
 
 DAILY_LIMIT = 5.0
@@ -17,7 +17,7 @@ SLABS = [
     (float('inf'), 9)
 ]
 
-TIME_SCALING_OPTIONS = {
+TIME_OPTIONS = {
     "5 Seconds per Reading": 5,
     "10 Seconds per Reading": 10,
     "30 Seconds per Reading": 30
@@ -53,7 +53,7 @@ body { background-color: #0E1117; }
 """, unsafe_allow_html=True)
 
 # =====================================================
-# SESSION STATE INIT
+# SESSION INIT
 # =====================================================
 
 if "data" not in st.session_state:
@@ -65,8 +65,11 @@ if "running" not in st.session_state:
 if "simulated_seconds" not in st.session_state:
     st.session_state.simulated_seconds = 0
 
+if "last_update" not in st.session_state:
+    st.session_state.last_update = datetime.now()
+
 # =====================================================
-# CORE FUNCTIONS
+# FUNCTIONS
 # =====================================================
 
 def generate_usage():
@@ -111,7 +114,6 @@ def predict_monthly_bill(data, simulated_seconds):
         return None
 
     total_usage = sum(data)
-
     usage_per_second = total_usage / simulated_seconds
 
     monthly_seconds = 30 * 24 * 60 * 60
@@ -135,20 +137,16 @@ st.markdown(
 st.markdown("<hr style='border:1px solid #00FFC6;'>", unsafe_allow_html=True)
 
 # =====================================================
-# SIMULATION SETTINGS
+# SETTINGS
 # =====================================================
 
 colA, colB = st.columns(2)
 
-time_label = colA.selectbox(
-    "Simulation Speed",
-    list(TIME_SCALING_OPTIONS.keys())
-)
-
-update_interval = TIME_SCALING_OPTIONS[time_label]
+time_label = colA.selectbox("Simulation Speed", list(TIME_OPTIONS.keys()))
+update_interval = TIME_OPTIONS[time_label]
 
 # =====================================================
-# CONTROL BUTTONS
+# BUTTONS (NOW FULLY RESPONSIVE)
 # =====================================================
 
 c1, c2, c3 = st.columns(3)
@@ -163,21 +161,22 @@ if c3.button("Reset"):
     st.session_state.running = False
     st.session_state.data = []
     st.session_state.simulated_seconds = 0
-    st.rerun()
 
 # =====================================================
-# REAL-TIME ENGINE (AUTO LIVE)
+# REAL-TIME ENGINE (NON-BLOCKING)
 # =====================================================
 
 if st.session_state.running:
+    now = datetime.now()
+    diff = (now - st.session_state.last_update).total_seconds()
 
-    usage = generate_usage()
-    st.session_state.data.append(usage)
+    if diff >= update_interval:
+        usage = generate_usage()
+        st.session_state.data.append(usage)
+        st.session_state.simulated_seconds += update_interval
+        st.session_state.last_update = now
 
-    st.session_state.simulated_seconds += update_interval
-
-    time.sleep(update_interval)
-    st.rerun()
+    st.experimental_rerun()
 
 # =====================================================
 # METRICS
@@ -210,7 +209,7 @@ if st.session_state.data:
     st.line_chart(df["Cumulative"])
 
 # =====================================================
-# AI FORECASTING
+# AI SECTION
 # =====================================================
 
 st.subheader("AI-Based Forecasting")
@@ -220,7 +219,7 @@ prediction = predict_next_reading(st.session_state.data)
 if prediction:
     st.success(f"Predicted Next Reading: {prediction} kWh")
 else:
-    st.info("Need at least 10 readings for AI model.")
+    st.info("Need at least 10 readings.")
 
 # =====================================================
 # MONTHLY PROJECTION
@@ -239,4 +238,4 @@ if monthly_result:
     mc1.metric("Estimated 30-Day Usage", f"{u30} kWh")
     mc2.metric("Projected Monthly Bill", f"₹{b30}")
 else:
-    st.info("Run simulation longer for accurate projection.")
+    st.info("Run simulation longer for projection.")
