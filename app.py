@@ -58,7 +58,7 @@ st.session_state.daily_limit = st.sidebar.slider(
 # =====================================================
 
 def generate_usage():
-    return round(random.uniform(0.02, 0.05), 3)
+    return round(random.uniform(0.002, 0.007), 4)
 
 
 def calculate_slab_bill(total_usage):
