@@ -1,24 +1,21 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import random
-from datetime import datetime, date
-from sklearn.linear_model import LinearRegression
+from datetime import date
 from streamlit_autorefresh import st_autorefresh
 
 # =====================================================
 # CONFIG
 # =====================================================
 
-DAILY_LIMIT = 5.0
+MINUTES_PER_MONTH = 60 * 24 * 30  # 43200
+TICK_INTERVAL_MS = 2000  # 2 seconds = 1 simulated minute
 
 SLABS = [
     (100, 5),
     (300, 7),
     (float("inf"), 9)
 ]
-
-TICK_INTERVAL_SECONDS = 2  # real-time speed
 
 # =====================================================
 # SESSION INIT
@@ -30,15 +27,31 @@ if "data" not in st.session_state:
 if "running" not in st.session_state:
     st.session_state.running = False
 
-if "month_start" not in st.session_state:
-    today = date.today()
-    st.session_state.month_start = date(today.year, today.month, 1)
+if "simulated_minutes" not in st.session_state:
+    st.session_state.simulated_minutes = 0
 
 if "daily_usage" not in st.session_state:
     st.session_state.daily_usage = 0
 
 if "current_day" not in st.session_state:
     st.session_state.current_day = date.today()
+
+if "daily_limit" not in st.session_state:
+    st.session_state.daily_limit = 5.0
+
+# =====================================================
+# SIDEBAR SETTINGS
+# =====================================================
+
+st.sidebar.header("⚙ Settings")
+
+st.session_state.daily_limit = st.sidebar.slider(
+    "Set Daily Usage Limit (units)",
+    min_value=1.0,
+    max_value=20.0,
+    value=st.session_state.daily_limit,
+    step=0.5
+)
 
 # =====================================================
 # FUNCTIONS
@@ -64,27 +77,18 @@ def calculate_slab_bill(total_usage):
     return round(bill, 2)
 
 
-def predict_monthly_estimate(data):
-    if len(data) < 10:
+def predict_monthly_bill(data, simulated_minutes):
+    if simulated_minutes < 1:
         return None
 
-    df = pd.DataFrame(data, columns=["Usage"])
-    df["Index"] = np.arange(len(df))
+    avg_per_minute = sum(data) / simulated_minutes
+    estimated_monthly_units = avg_per_minute * MINUTES_PER_MONTH
+    estimated_bill = calculate_slab_bill(estimated_monthly_units)
 
-    model = LinearRegression()
-    model.fit(df[["Index"]], df["Usage"])
-
-    future_points = 100
-    future_index = np.arange(len(df), len(df) + future_points).reshape(-1, 1)
-    predictions = model.predict(future_index)
-
-    predicted_total = sum(data) + sum(predictions)
-    predicted_bill = calculate_slab_bill(predicted_total)
-
-    return round(predicted_total, 2), round(predicted_bill, 2)
+    return round(estimated_monthly_units, 2), round(estimated_bill, 2)
 
 # =====================================================
-# HEADER
+# UI HEADER
 # =====================================================
 
 st.title("⚡ Household Electricity Consumption Analysis")
@@ -104,22 +108,24 @@ if col2.button("Stop"):
 if col3.button("Reset"):
     st.session_state.running = False
     st.session_state.data = []
+    st.session_state.simulated_minutes = 0
     st.session_state.daily_usage = 0
-    st.session_state.month_start = date.today().replace(day=1)
 
 # =====================================================
 # REAL-TIME ENGINE
 # =====================================================
 
 if st.session_state.running:
-    st_autorefresh(interval=TICK_INTERVAL_SECONDS * 1000, key="live")
+    st_autorefresh(interval=TICK_INTERVAL_MS, key="live")
 
     usage = generate_usage()
     st.session_state.data.append(usage)
 
-    today = date.today()
+    # Each tick = 1 simulated minute
+    st.session_state.simulated_minutes += 1
 
-    # Reset daily usage if new day
+    # Daily reset logic
+    today = date.today()
     if today != st.session_state.current_day:
         st.session_state.daily_usage = 0
         st.session_state.current_day = today
@@ -131,18 +137,19 @@ if st.session_state.running:
 # =====================================================
 
 total_usage = sum(st.session_state.data)
-monthly_bill = calculate_slab_bill(total_usage)
+current_bill = calculate_slab_bill(total_usage)
 latest = st.session_state.data[-1] if st.session_state.data else 0
 
 m1, m2, m3 = st.columns(3)
-
 m1.metric("Latest Reading", f"{latest} units")
 m2.metric("Total Usage (This Month)", f"{round(total_usage,2)} units")
-m3.metric("Estimated Bill (Current Month)", f"₹{monthly_bill}")
+m3.metric("Estimated Current Bill", f"₹{current_bill}")
 
-# Daily Warning
-if st.session_state.daily_usage > DAILY_LIMIT:
-    st.error("⚠ Daily usage exceeded 5 units!")
+# Daily exceed warning using custom limit
+if st.session_state.daily_usage > st.session_state.daily_limit:
+    st.error(
+        f"⚠ Daily usage exceeded limit of {st.session_state.daily_limit} units!"
+    )
 
 # =====================================================
 # GRAPH
@@ -154,17 +161,27 @@ if st.session_state.data:
     st.line_chart(df["Cumulative"])
 
 # =====================================================
-# PREDICTION SECTION
+# MONTHLY PREDICTION
 # =====================================================
 
-st.subheader("📊 Monthly Prediction")
+st.subheader("📅 Monthly Prediction")
 
-prediction = predict_monthly_estimate(st.session_state.data)
+if st.session_state.simulated_minutes >= 1:
 
-if prediction:
-    predicted_units, predicted_bill = prediction
-    c1, c2 = st.columns(2)
-    c1.metric("Predicted End-of-Month Units", predicted_units)
-    c2.metric("Predicted End-of-Month Bill", f"₹{predicted_bill}")
+    # Update every 5 minutes
+    if st.session_state.simulated_minutes % 5 == 0:
+
+        prediction = predict_monthly_bill(
+            st.session_state.data,
+            st.session_state.simulated_minutes
+        )
+
+        if prediction:
+            est_units, est_bill = prediction
+            c1, c2 = st.columns(2)
+            c1.metric("Estimated Monthly Units", est_units)
+            c2.metric("Estimated Monthly Bill", f"₹{est_bill}")
+    else:
+        st.info("Prediction updates every 5 simulated minutes.")
 else:
-    st.info("Collect more data for prediction.")
+    st.info("Monthly prediction will appear after 1 simulated minute.")
